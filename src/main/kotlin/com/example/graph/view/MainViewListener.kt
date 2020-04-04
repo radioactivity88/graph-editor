@@ -49,27 +49,26 @@ class MainViewListener(private val diagramView: DiagramView) : ViewListener {
         // Release selection
         deselectIfNotInFocuse(x, y)
         selectIfNotSelected(x, y)
-        if (selectedItem != null) {
-            dragContext.translateAnchorX = selectedItem!!.translateX
-            dragContext.translateAnchorY = selectedItem!!.translateY
-        }
     }
 
     override fun onMoved(x: Double, y: Double, ctrl: Boolean, shift: Boolean) {
         if (selectedItem != null) {
             val actualScale = diagramView.getSceneScale()
-            var dx = dragContext.translateAnchorX + ((x - dragContext.mouseAnchorX) / actualScale)
-            var dy = dragContext.translateAnchorY + ((y - dragContext.mouseAnchorY) / actualScale)
+            val dx = ((x - dragContext.mouseAnchorX) / actualScale)
+            val dy = ((y - dragContext.mouseAnchorY) / actualScale)
 
-            dx = if (dx < MIN_X) MIN_X else if (dx > MAX_X) MAX_X else dx
-            dy = if (dy < MIN_Y) MIN_Y else if (dy > MAX_Y) MAX_Y else dy
+            dragContext.mouseAnchorX = x
+            dragContext.mouseAnchorY = y
+
+//            dx = if (dx < MIN_X) MIN_X else if (dx > MAX_X) MAX_X else dx
+//            dy = if (dy < MIN_Y) MIN_Y else if (dy > MAX_Y) MAX_Y else dy
 
             log.info("New coordinates are ($dx,$dy)")
-            selectedItem!!.translateX = dx
-            selectedItem!!.translateY = dy
+            selectedItem!!.translateX += dx
+            selectedItem!!.translateY += dy
             itemSelectionBorder?.let {
-                it.translateX = dx
-                it.translateY = dy
+                it.translateX += dx
+                it.translateY += dy
             }
         }
     }
