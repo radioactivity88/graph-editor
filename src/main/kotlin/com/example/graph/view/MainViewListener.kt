@@ -1,5 +1,7 @@
 package com.example.graph.view
 
+import javafx.geometry.BoundingBox
+import javafx.geometry.Bounds
 import javafx.scene.Group
 import javafx.scene.Node
 import javafx.scene.paint.Color
@@ -18,7 +20,7 @@ class MainViewListener(private val diagramView: DiagramView) : ViewListener {
 
     private val paneItems = mutableListOf<Node>()
     private var itemSelectionBorder: Rectangle? = null
-    private var selectedItem: Node? = null
+    private var selectedItems = mutableListOf<Node>()
     private val dragContext = DragContext()
 
     init {
@@ -47,12 +49,14 @@ class MainViewListener(private val diagramView: DiagramView) : ViewListener {
         dragContext.mouseAnchorY = y
 
         // Release selection
-        deselectIfNotInFocuse(x, y)
+        if (!ctrl) {
+            deselectIfNotInFocuse(x, y)
+        }
         selectIfNotSelected(x, y)
     }
 
     override fun onMoved(x: Double, y: Double, ctrl: Boolean, shift: Boolean) {
-        if (selectedItem != null) {
+        if (selectedItems.isNotEmpty()) {
             val actualScale = diagramView.getSceneScale()
             val dx = ((x - dragContext.mouseAnchorX) / actualScale)
             val dy = ((y - dragContext.mouseAnchorY) / actualScale)
@@ -64,8 +68,10 @@ class MainViewListener(private val diagramView: DiagramView) : ViewListener {
 //            dy = if (dy < MIN_Y) MIN_Y else if (dy > MAX_Y) MAX_Y else dy
 
             log.info("New coordinates are ($dx,$dy)")
-            selectedItem!!.translateX += dx
-            selectedItem!!.translateY += dy
+            selectedItems.forEach {
+                it.translateX += dx
+                it.translateY += dy
+            }
             itemSelectionBorder?.let {
                 it.translateX += dx
                 it.translateY += dy
@@ -78,25 +84,26 @@ class MainViewListener(private val diagramView: DiagramView) : ViewListener {
     }
 
     private fun deselectIfNotInFocuse(x: Double, y: Double) {
-        if (selectedItem != null) {
-            val point = selectedItem!!.sceneToLocal(x, y)
-            if (!selectedItem!!.contains(point)) {
-                diagramView.removeNodeFromScene(itemSelectionBorder!!)
-                itemSelectionBorder = null
-                selectedItem = null
+        if (selectedItems.isNotEmpty()) {
+            val present = selectedItems.any {
+                val point = it.sceneToLocal(x, y)
+                it.contains(point)
+            }
+            if (!present) {
+                selectedItems.clear()
+                updateSelectionBorder(selectedItems)
+
             }
         }
     }
 
     private fun selectIfNotSelected(x: Double, y: Double) {
-        if (selectedItem == null) {
-            paneItems
-                .lastOrNull {
-                    val point = it.sceneToLocal(x, y)
-                    it.contains(point)
-                }
-                .apply { selectedItem = this }
-            selectedItem?.let { updateSelectionBorder(it) }
+        paneItems.lastOrNull {
+            val point = it.sceneToLocal(x, y)
+            it.contains(point) && !selectedItems.contains(it)
+        }?.apply {
+            selectedItems.add(this)
+            updateSelectionBorder(selectedItems)
         }
     }
 
@@ -114,7 +121,7 @@ class MainViewListener(private val diagramView: DiagramView) : ViewListener {
         return Group(rect, textView)
     }
 
-    private fun updateSelectionBorder(selectedNode: Node?) {
+    private fun updateSelectionBorder(selectedNode: List<Node>) {
         // Remove old selection border
         itemSelectionBorder?.let { diagramView.removeNodeFromScene(it) }
         // Create new
@@ -123,18 +130,43 @@ class MainViewListener(private val diagramView: DiagramView) : ViewListener {
         itemSelectionBorder?.let { diagramView.addNodeToScene(it) }
     }
 
-    private fun createSelectionBorder(node: Node?): Rectangle? {
-        return node?.let {
-            val bounds = node.boundsInLocal
+    private fun createSelectionBorder(nodes: List<Node>): Rectangle? {
+        val bounds = getCommonBorder(nodes)
+        return bounds?.let {
             val rect = Rectangle(bounds.minX, bounds.minY, bounds.width, bounds.height)
             val actualScale = diagramView.getSceneScale()
-            rect.translateX = node.translateX
-            rect.translateY = node.translateY
+//            rect.translateX = node.translateX
+//            rect.translateY = node.translateY
             rect.fill = Color.TRANSPARENT
             rect.stroke = Color.BLUE
             rect.strokeDashArray.setAll(5.0 / actualScale, 5.0 / actualScale)
             rect.strokeWidth = 1 / actualScale
             return rect
         }
+
+    }
+
+    private fun getCommonBorder(nodes: List<Node>): Bounds? {
+        var minX: Double? = null
+        var minY: Double? = null
+        var maxX: Double? = null
+        var maxY: Double? = null
+        nodes.forEach {
+            val bounds = it.boundsInParent
+            if (minX == null) {
+                minX = bounds.minX
+                maxX = bounds.maxX
+                minY = bounds.minY
+                maxY = bounds.maxY
+            } else {
+                if (minX!! > bounds.minX) minX = bounds.minX
+                if (minY!! > bounds.minY) minY = bounds.minY
+                if (maxX!! < bounds.maxX) maxX = bounds.maxX
+                if (maxY!! < bounds.maxY) maxY = bounds.maxY
+            }
+        }
+        if (minX != null)
+            return BoundingBox(minX!!, minY!!, maxX!! - minX!!, maxY!! - minY!!)
+        return null
     }
 }
