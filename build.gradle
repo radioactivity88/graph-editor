@@ -1,0 +1,45 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.jetbrains.kotlin.jvm' version '1.3.71'
+    id 'org.openjfx.javafxplugin' version '0.0.8'
+}
+
+group 'com.example'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 11
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven {
+        url "https://oss.sonatype.org/content/repositories/snapshots/"
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    implementation 'no.tornado:tornadofx:1.7.17'
+    // https://mvnrepository.com/artifact/org.openjfx/javafx
+    compile group: 'org.openjfx', name: 'javafx', version: '12', ext: 'pom'
+
+    implementation 'org.slf4j:slf4j-api:1.7.28'
+    implementation 'ch.qos.logback:logback-classic:1.2.3'
+
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
+
+javafx {
+    version = '13'
+    modules = ['javafx.controls', 'javafx.fxml']
+}
+
+mainClassName = 'com.example.graph.DiagramApp'
+
+compileKotlin {
+    kotlinOptions.jvmTarget = "1.8"
+}
+compileTestKotlin {
+    kotlinOptions.jvmTarget = "1.8"
+}
