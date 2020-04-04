@@ -4,27 +4,18 @@ package com.example.graph.view
 import javafx.beans.property.SimpleDoubleProperty
 import javafx.geometry.Insets
 import javafx.geometry.Pos
-import javafx.scene.Group
 import javafx.scene.Node
 import javafx.scene.Parent
 import javafx.scene.input.MouseEvent
 import javafx.scene.input.ScrollEvent
 import javafx.scene.layout.Pane
 import javafx.scene.layout.Priority
-import javafx.scene.paint.Color
-import javafx.scene.shape.Rectangle
-import javafx.scene.shape.Shape
-import javafx.scene.text.Text
 import org.slf4j.LoggerFactory
 import tornadofx.*
 
 class PaneView : View("Diagram"), DiagramView {
     companion object {
         private val log = LoggerFactory.getLogger(PaneView::class.java)
-        private const val MIN_X = -1500.0
-        private const val MIN_Y = MIN_X
-        private const val MAX_X = -MIN_X
-        private const val MAX_Y = -MIN_Y
 
         private const val MAX_SCALE = 10.0
         private const val MIN_SCALE = .1
@@ -35,14 +26,10 @@ class PaneView : View("Diagram"), DiagramView {
 
     private var toolbox: Parent by singleAssign()
 
-    private val paneItems = mutableListOf<Node>()
+
     private var workArea: Pane by singleAssign()
 
-    private var itemSelectionBorder: Rectangle? = null
-    private var selectedItem: Node? = null
-    private val dragContext = DragContext()
-
-    private val viewListener = MainViewListener()
+    private var viewListener: ViewListener
 
     override val root = hbox {
         addClass(DraggingStyles.wrapper)
@@ -96,26 +83,23 @@ class PaneView : View("Diagram"), DiagramView {
         padding = Insets(10.0)
         spacing = 10.0
 
-        addEventFilter(MouseEvent.MOUSE_PRESSED, ::startDrag)
-        addEventFilter(MouseEvent.MOUSE_DRAGGED, ::drag)
-        addEventFilter(MouseEvent.MOUSE_RELEASED, ::endDrag)
-        setOnScroll { scroll(it) }
-
-        /**
-         * Nodes for example
-         */
-        addNode(createRectangle(50.0, 50.0, 50.0, 50.0, Color.GRAY, "Hello"))
-        addNode(createRectangle(15.00, 50.0, 50.0, 50.0, Color.GREEN, "Hello2"))
+        addEventFilter(MouseEvent.MOUSE_CLICKED, ::mouseClicked)
+        addEventFilter(MouseEvent.MOUSE_PRESSED, ::mousePressed)
+        addEventFilter(MouseEvent.MOUSE_DRAGGED, ::mouseDragged)
+        addEventFilter(MouseEvent.MOUSE_RELEASED, ::mouseReleased)
+        setOnScroll { scrollWheel(it) }
     }
 
-    private fun createRectangle(x: Double, y: Double, width: Double, height: Double, color: Color, text: String): Node {
-        val rect = Rectangle(x, y, width, height)
-        rect.fill = color
-        val text = Text(x + width / 2, y + height / 2, text)
-        return Group(rect, text)
+    init {
+        viewListener = MainViewListener(this)
+
     }
 
-    private fun scroll(evt: ScrollEvent) {
+    private fun mouseClicked(evt: MouseEvent) {
+        viewListener.onClicked(evt.sceneX, evt.sceneY, evt.isControlDown, evt.isShiftDown)
+    }
+
+    private fun scrollWheel(evt: ScrollEvent) {
 
         var actualScale = scale.get()
         val oldScale = actualScale
@@ -134,10 +118,7 @@ class PaneView : View("Diagram"), DiagramView {
         workArea.translateX -= dx * f
         workArea.translateY -= dy * f
 
-        itemSelectionBorder?.let {
-            it.strokeDashArray.setAll(5.0 / actualScale, 5.0 / actualScale)
-            it.strokeWidth = 1 / actualScale
-        }
+        viewListener.onScaleChanged(actualScale)
 
         evt.consume()
     }
@@ -147,89 +128,21 @@ class PaneView : View("Diagram"), DiagramView {
         return if (value.compareTo(max) > 0) max else value
     }
 
-    private fun startDrag(evt: MouseEvent) {
+    private fun mousePressed(evt: MouseEvent) {
         if (!evt.isPrimaryButtonDown) return
         viewListener.onPressed(evt.sceneX, evt.sceneY, evt.isControlDown, evt.isShiftDown)
-
-        if (selectedItem != null) {
-            val point = selectedItem!!.sceneToLocal(evt.sceneX, evt.sceneY)
-            if (!selectedItem!!.contains(point)) {
-                removeSelection()
-            }
-        }
-
-        if (selectedItem == null) {
-            paneItems
-                .lastOrNull {
-                    val point = it.sceneToLocal(evt.sceneX, evt.sceneY)
-                    it.contains(point)
-                }
-                .apply { selectedItem = this }
-        }
-
-        if (selectedItem != null) {
-            if (itemSelectionBorder == null) {
-                itemSelectionBorder = createSelectionBorder(selectedItem!!)
-                workArea.add(itemSelectionBorder!!)
-            }
-            dragContext.mouseAnchorX = evt.sceneX
-            dragContext.mouseAnchorY = evt.sceneY
-            dragContext.translateAnchorX = selectedItem!!.translateX
-            dragContext.translateAnchorY = selectedItem!!.translateY
-        }
     }
 
-    private fun removeSelection() {
-        selectedItem = null
-        itemSelectionBorder.let { workArea.children.remove(it) }
-        itemSelectionBorder = null
-    }
-
-    private fun createSelectionBorder(node: Node): Rectangle {
-        val bounds = node.boundsInLocal
-        val rect = Rectangle(bounds.minX, bounds.minY, bounds.width, bounds.height)
-        val actualScale = scale.get()
-        rect.translateX = node.translateX
-        rect.translateY = node.translateY
-        rect.fill = Color.TRANSPARENT
-        rect.stroke = Color.BLUE
-        rect.strokeDashArray.setAll(5.0 / actualScale, 5.0 / actualScale)
-        rect.strokeWidth = 1 / actualScale
-        return rect
-    }
-
-    private fun drag(evt: MouseEvent) {
+    private fun mouseDragged(evt: MouseEvent) {
         if (!evt.isPrimaryButtonDown) return
         viewListener.onMoved(evt.sceneX, evt.sceneY, evt.isControlDown, evt.isShiftDown)
-
-        if (selectedItem != null) {
-            val actualScale = scale.get()
-            var x = dragContext.translateAnchorX + ((evt.sceneX - dragContext.mouseAnchorX) / actualScale)
-            var y = dragContext.translateAnchorY + ((evt.sceneY - dragContext.mouseAnchorY) / actualScale)
-
-            x = if (x < MIN_X) MIN_X else if (x > MAX_X) MAX_X else x
-            y = if (y < MIN_Y) MIN_Y else if (y > MAX_Y) MAX_Y else y
-
-            log.info("New coordinates are ($x,$y)")
-            selectedItem!!.translateX = x
-            selectedItem!!.translateY = y
-            itemSelectionBorder?.let {
-                it.translateX = x
-                it.translateY = y
-            }
-            evt.consume()
-        }
     }
 
-    private fun endDrag(evt: MouseEvent) {
+    private fun mouseReleased(evt: MouseEvent) {
         viewListener.onReleased(evt.sceneX, evt.sceneY, evt.isControlDown, evt.isShiftDown)
     }
 
-
-    private fun addNode(node: Node) {
-        paneItems.add(node)
-        workArea.add(node)
-    }
+    override fun getSceneScale() = scale.get()
 
     override fun addNodeToScene(node: Node) {
         workArea.add(node)
